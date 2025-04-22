@@ -1,9 +1,19 @@
 from fastapi import FastAPI
-from routers import stocks  # correct relative import
+from fastapi.middleware.cors import CORSMiddleware
+from routers import stock_routes
 
 app = FastAPI()
 
-app.include_router(stocks.router, prefix="/api", tags=["stocks"])
+# CORS configuration for development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Specifically allow frontend origin
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
+
+app.include_router(stock_routes.router, prefix="/api", tags=["stocks"])
 
 @app.get("/")
 def say_hello_world():
