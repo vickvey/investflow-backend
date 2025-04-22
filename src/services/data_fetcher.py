@@ -1,131 +1,12 @@
-# import yfinance as yf
-# from datetime import datetime,timedelta
-
-# class DataFetcher:
-#     @staticmethod
-#     def single_stock_data(ticker='ADRO.JK', start_date=datetime.now() - timedelta(days=365), end_date=datetime.now()):
-#         try:
-#             # Download the data
-#             data = yf.download(ticker, start=start_date, end=end_date, progress=False)
-            
-#             # Reset index to move Date from index to a column
-#             data = data.reset_index()
-
-#             # Convert the 'Date' column to a string for serialization
-#             data['Date'] = data['Date'].astype(str)
-
-#             return data
-#         except Exception as e:
-#             raise ValueError(f"Failed to fetch data: {e}")
-        
-#     @staticmethod
-#     def multiple_stocks_data(tickers, start_date="2021-05-12", end_date="2022-05-12"):
-    
-#         try:
-#             data = yf.download(tickers, start=start_date, end=end_date, progress=False)['Close']
-#             # return data.dropna()
-#             return data
-#         except Exception as e:
-#             raise ValueError(f"Failed to fetch data: {e}")
-# # Usage
-# # data = DataFetcher.single_stock_data()
-
-#     @staticmethod
-#     def stock_period_data(ticker,period = '1mo'):
-#         """
-#         Fetch historical OHLCV data for a single stock for a given period.
-
-#         Args:
-#             ticker (str): e.g. 'AAPL'
-#             period (str): e.g. '1mo', '3mo', '6mo', etc.
-
-#         Returns:
-#             pd.DataFrame: Daily stock data
-#         """
-#         try:
-#             data = yf.download(ticker, period=period, interval='1d', progress=False)
-#             return data
-#         except Exception as e:
-#             raise ValueError(f"Failed to fetch data: {e}")
-
-
-#     @staticmethod
-#     def today_performance(ticker,period='5d'):
-#         # show users selected or invested stocker performance for today
-#         # give returns and open, close, high and low for today
-#         # data = DataFetcher.single_stock_data(tickers, )
-
-#         data = yf.download(ticker, period, interval='1d', progress=False)
-
-#         # Check if data is available
-#         if data.empty:
-#             return f"No data available for {ticker}."
-
-#         # Get today's date in the format matching the DataFrame index
-#         today_str = datetime.today().strftime('%Y-%m-%d')
-
-#         # Attempt to extract today's data
-#         if today_str in data.index.strftime('%Y-%m-%d'):
-#             todays_data = data.loc[data.index.strftime('%Y-%m-%d') == today_str].iloc[0]
-#         else:
-#             # If today's data isn't available, use the most recent available data
-#             todays_data = data.iloc[-1]
-#             today_str = todays_data.name.strftime('%Y-%m-%d')
-
-#         # Calculate return
-#         open_price = todays_data['Open']
-#         close_price = todays_data['Close']
-#         daily_return = ((close_price - open_price) / open_price) * 100
-
-#         return {
-#             'Date': today_str,
-#             'Open': open_price,
-#             'High': todays_data['High'],
-#             'Low': todays_data['Low'],
-#             'Close': close_price,
-#             'Return (%)': round(daily_return, 2)
-#         }
-
-
-# """
-#     Fetch historical adjusted close prices from Yahoo Finance.
-    
-#     Parameters:
-#     - tickers: list of str, stock tickers (e.g., ['ADRO.JK', 'ASII.JK']).
-#     - start_date: str, start date in YYYY-MM-DD format.
-#     - end_date: str, end date in YYYY-MM-DD format.
-    
-#     Returns:
-#     - pandas DataFrame with dates as index and tickers as columns.
-# """
-
-
-# # def generate_synthetic_data(tickers, start_date="2021-05-12", end_date="2022-05-12", base_price=100, volatility=0.01):
-# #     """
-# #     Generate synthetic price data for testing.
-    
-# #     Parameters:
-# #     - tickers: list of str, stock tickers.
-# #     - start_date: str, start date.
-# #     - end_date: str, end date.
-# #     - base_price: float, starting price for all stocks.
-# #     - volatility: float, standard deviation of daily returns.
-    
-# #     Returns:
-# #     - pandas DataFrame with dates as index and tickers as columns.
-# #     """
-# #     dates = pd.date_range(start=start_date, end=end_date, freq="B")
-# #     prices = pd.DataFrame(
-# #         np.random.randn(len(dates), len(tickers)) * volatility + base_price,
-# #         index=dates,
-# #         columns=tickers
-# #     ).cumsum()
-# #     return prices
-
-
-from datetime import datetime, timedelta
+from datetime import datetime
 import yfinance as yf
 import pandas as pd
+import numpy as np
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 class DataFetcher:
     @staticmethod
@@ -133,14 +14,35 @@ class DataFetcher:
         """
         Fetch historical OHLCV data for a single stock within a date range.
         """
+        if not isinstance(ticker, str) or not ticker:
+            raise ValueError("Ticker must be a non-empty string")
+        if not isinstance(start_date, datetime) or not isinstance(end_date, datetime):
+            raise ValueError("Start and end dates must be datetime objects")
+        if start_date >= end_date:
+            raise ValueError("Start date must be earlier than end date")
+
         try:
             data = yf.download(ticker, start=start_date, end=end_date, progress=False)
             if data.empty:
-                raise ValueError(f"No data available for {ticker}")
+                raise ValueError(f"No data available for {ticker} between {start_date} and {end_date}")
+            # Handle MultiIndex columns safely
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = [col[0].title() for col in data.columns]
+            else:
+                data.columns = [col.title() for col in data.columns]
+            # Validate required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                raise ValueError(f"Missing required columns for {ticker}: {missing_columns}")
             data = data.reset_index()
+            if 'Date' not in data.columns:
+                raise ValueError("Date column missing from fetched data")
             data['Date'] = data['Date'].astype(str)
+            logger.debug(f"Processed single stock data columns for {ticker}: {data.columns.tolist()}")
             return data
         except Exception as e:
+            logger.error(f"Failed to fetch data for {ticker}: {str(e)}")
             raise ValueError(f"Failed to fetch data for {ticker}: {str(e)}")
 
     @staticmethod
@@ -148,25 +50,62 @@ class DataFetcher:
         """
         Fetch historical closing prices for multiple stocks.
         """
+        if not isinstance(tickers, list) or not tickers:
+            raise ValueError("Tickers must be a non-empty list")
+        if not all(isinstance(t, str) for t in tickers):
+            raise ValueError("All tickers must be strings")
+        if not isinstance(start_date, str) or not isinstance(end_date, str):
+            raise ValueError("Start and end dates must be strings in YYYY-MM-DD format")
+        
+        try:
+            pd.to_datetime(start_date)  # Validate date format
+            pd.to_datetime(end_date)
+            if pd.to_datetime(start_date) >= pd.to_datetime(end_date):
+                raise ValueError("Start date must be earlier than end date")
+        except ValueError as e:
+            raise ValueError(f"Invalid date format: {str(e)}")
+
         try:
             data = yf.download(tickers, start=start_date, end=end_date, progress=False)['Close']
             if data.empty:
-                raise ValueError(f"No data available for {tickers}")
+                raise ValueError(f"No data available for {tickers} between {start_date} and {end_date}")
+            # Handle MultiIndex for multiple tickers
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = [col[1] for col in data.columns]
+            logger.debug(f"Multiple stocks data columns: {data.columns.tolist()}")
             return data
         except Exception as e:
-            raise ValueError(f"Failed to fetch data: {str(e)}")
+            logger.error(f"Failed to fetch data for {tickers}: {str(e)}")
+            raise ValueError(f"Failed to fetch data for {tickers}: {str(e)}")
 
     @staticmethod
     def stock_period_data(ticker: str, period: str = '1mo') -> pd.DataFrame:
         """
         Fetch historical OHLCV data for a single stock for a given period.
         """
+        if not isinstance(ticker, str) or not ticker:
+            raise ValueError("Ticker must be a non-empty string")
+        if not isinstance(period, str) or period not in ['1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', '5y', '10y', 'ytd', 'max']:
+            raise ValueError("Period must be a valid string (e.g., '1mo', '1y')")
+
         try:
             data = yf.download(ticker, period=period, interval='1d', progress=False)
             if data.empty:
-                raise ValueError(f"No data available for {ticker}")
+                raise ValueError(f"No data available for {ticker} for period {period}")
+            # Handle MultiIndex columns safely
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = [col[0].title() for col in data.columns]
+            else:
+                data.columns = [col.title() for col in data.columns]
+            # Validate required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                raise ValueError(f"Missing required columns for {ticker}: {missing_columns}")
+            logger.debug(f"Stock period data columns for {ticker}: {data.columns.tolist()}")
             return data
         except Exception as e:
+            logger.error(f"Failed to fetch data for {ticker}: {str(e)}")
             raise ValueError(f"Failed to fetch data for {ticker}: {str(e)}")
 
     @staticmethod
@@ -174,10 +113,25 @@ class DataFetcher:
         """
         Fetch today's performance metrics for a stock.
         """
+        if not isinstance(ticker, str) or not ticker:
+            raise ValueError("Ticker must be a non-empty string")
+        if not isinstance(period, str) or period not in ['1d', '5d', '1mo', '3mo', '6mo', '1y']:
+            raise ValueError("Period must be a valid string (e.g., '5d', '1mo')")
+
         try:
             data = yf.download(ticker, period=period, interval='1d', progress=False)
             if data.empty:
-                raise ValueError(f"No data available for {ticker}")
+                raise ValueError(f"No data available for {ticker} for period {period}")
+            # Handle MultiIndex columns safely
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = [col[0].title() for col in data.columns]
+            else:
+                data.columns = [col.title() for col in data.columns]
+            # Validate required columns
+            required_columns = ['Open', 'High', 'Low', 'Close']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                raise ValueError(f"Missing required columns for {ticker}: {missing_columns}")
 
             today_str = datetime.today().strftime('%Y-%m-%d')
             if today_str in data.index.strftime('%Y-%m-%d'):
@@ -188,17 +142,18 @@ class DataFetcher:
 
             open_price = todays_data['Open']
             close_price = todays_data['Close']
-            daily_return = ((close_price - open_price) / open_price) * 100
+            daily_return = ((close_price - open_price) / open_price) * 100 if open_price != 0 else 0
 
             return {
                 'Date': today_str,
-                'Open': round(open_price, 2),
-                'High': round(todays_data['High'], 2),
-                'Low': round(todays_data['Low'], 2),
-                'Close': round(close_price, 2),
-                'Return (%)': round(daily_return, 2)
+                'Open': round(float(open_price), 2),
+                'High': round(float(todays_data['High']), 2),
+                'Low': round(float(todays_data['Low']), 2),
+                'Close': round(float(close_price), 2),
+                'Return (%)': round(float(daily_return), 2)
             }
         except Exception as e:
+            logger.error(f"Failed to fetch today's performance for {ticker}: {str(e)}")
             raise ValueError(f"Failed to fetch today's performance for {ticker}: {str(e)}")
 
     @staticmethod
@@ -206,6 +161,9 @@ class DataFetcher:
         """
         Fetch basic stock information for a single ticker.
         """
+        if not isinstance(ticker, str) or not ticker:
+            raise ValueError("Ticker must be a non-empty string")
+
         try:
             stock = yf.Ticker(ticker)
             info = stock.info
@@ -213,13 +171,19 @@ class DataFetcher:
 
             if history.empty:
                 raise ValueError(f"No historical data available for {ticker}")
+            # Handle columns safely (history typically returns simple Index, not MultiIndex)
+            history.columns = [col.title() for col in history.columns]
+            # Validate required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            missing_columns = [col for col in required_columns if col not in history.columns]
+            if missing_columns:
+                raise ValueError(f"Missing required columns for {ticker}: {missing_columns}")
 
             latest_data = history.iloc[-1]
             prev_data = history.iloc[-2] if len(history) > 1 else latest_data
 
-            # Calculate change and change percent
-            close_price = latest_data['Close']
-            prev_close = prev_data['Close']
+            close_price = float(latest_data['Close'])
+            prev_close = float(prev_data['Close'])
             change = close_price - prev_close
             change_percent = (change / prev_close) * 100 if prev_close != 0 else 0
 
@@ -229,15 +193,54 @@ class DataFetcher:
                 'price': round(close_price, 2),
                 'change': round(change, 2),
                 'changePercent': round(change_percent, 2),
-                'marketCap': info.get('marketCap', 0) / 1e9 if info.get('marketCap') else 'N/A',  # In billions
+                'marketCap': info.get('marketCap', 0) / 1e9 if info.get('marketCap') else 'N/A',
                 'peRatio': round(info.get('trailingPE', 0), 2) if info.get('trailingPE') else 'N/A',
                 'dividend': round(info.get('dividendYield', 0) * 100, 2) if info.get('dividendYield') else 0,
-                'volume': round(latest_data['Volume'] / 1e6, 2),  # In millions
+                'volume': round(float(latest_data['Volume']) / 1e6, 2),
                 'avgVolume': round(info.get('averageVolume', 0) / 1e6, 2) if info.get('averageVolume') else 'N/A',
-                'high': round(latest_data['High'], 2),
-                'low': round(latest_data['Low'], 2),
-                'open': round(latest_data['Open'], 2),
+                'high': round(float(latest_data['High']), 2),
+                'low': round(float(latest_data['Low']), 2),
+                'open': round(float(latest_data['Open']), 2),
                 'prevClose': round(prev_close, 2)
             }
         except Exception as e:
+            logger.error(f"Failed to fetch stock info for {ticker}: {str(e)}")
             raise ValueError(f"Failed to fetch stock info for {ticker}: {str(e)}")
+
+    @staticmethod
+    def benchmark_data(benchmark_ticker: str = '^GSPC', start_date: datetime = None, end_date: datetime = None) -> pd.DataFrame:
+        """
+        Fetch historical OHLCV data for a benchmark (e.g., S&P 500) within a date range.
+        """
+        if not isinstance(benchmark_ticker, str) or not benchmark_ticker:
+            raise ValueError("Benchmark ticker must be a non-empty string")
+        if start_date and not isinstance(start_date, datetime):
+            raise ValueError("Start date must be a datetime object")
+        if end_date and not isinstance(end_date, datetime):
+            raise ValueError("End date must be a datetime object")
+        if start_date and end_date and start_date >= end_date:
+            raise ValueError("Start date must be earlier than end date")
+
+        try:
+            data = yf.download(benchmark_ticker, start=start_date, end=end_date, progress=False)
+            if data.empty:
+                raise ValueError(f"No data available for benchmark {benchmark_ticker}")
+            # Handle MultiIndex columns safely
+            if isinstance(data.columns, pd.MultiIndex):
+                data.columns = [col[0].title() for col in data.columns]
+            else:
+                data.columns = [col.title() for col in data.columns]
+            # Validate required columns
+            required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+            missing_columns = [col for col in required_columns if col not in data.columns]
+            if missing_columns:
+                raise ValueError(f"Missing required columns for {benchmark_ticker}: {missing_columns}")
+            data = data.reset_index()
+            if 'Date' not in data.columns:
+                raise ValueError("Date column missing from benchmark data")
+            data['Date'] = data['Date'].astype(str)
+            logger.debug(f"Processed benchmark data columns for {benchmark_ticker}: {data.columns.tolist()}")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to fetch benchmark data for {benchmark_ticker}: {str(e)}")
+            raise ValueError(f"Failed to fetch benchmark data for {benchmark_ticker}: {str(e)}")
