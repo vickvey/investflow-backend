@@ -3,6 +3,8 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import stock_routes
+from routers.optimization_setting_routes import router as optimizer_router
+
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -26,6 +28,7 @@ app.add_middleware(
 
 # Include the stock routes
 app.include_router(stock_routes.router, prefix="/api", tags=["stocks"])
+app.include_router(optimizer_router, prefix="/api", tags = ["optimizer"])
 
 # Simple health check route
 @app.get("/")
