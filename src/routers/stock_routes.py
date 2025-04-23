@@ -174,22 +174,39 @@ def get_stock_history(
         raise HTTPException(status_code=500, detail=f"Error fetching history data: {str(e)}")
     
 # New Added
+# @router.get("/stock/{ticker}/ohlc")
+# def get_stock_ohlc_data(
+#     ticker: str,
+#     start: datetime = Query(..., description="Start date in YYYY-MM-DD format"),
+#     end: datetime = Query(..., description="End date in YYYY-MM-DD format")
+# ):
+#     """
+#     Get OHLC (Open, High, Low, Close) data for candlestick charts.
+#     Example: /api/stock/AAPL/ohlc?start=2024-03-01&end=2024-04-01
+#     """
+#     try:
+#         ticker = validate_ticker(ticker)
+#         result = get_stock_ohlc(ticker, start, end)
+#         return result
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"Error fetching OHLC data: {str(e)}")
+
 @router.get("/stock/{ticker}/ohlc")
 def get_stock_ohlc_data(
     ticker: str,
-    start: datetime = Query(..., description="Start date in YYYY-MM-DD format"),
-    end: datetime = Query(..., description="End date in YYYY-MM-DD format")
+    start: datetime = Query(..., description="YYYY-MM-DD"),
+    end:   datetime = Query(..., description="YYYY-MM-DD"),
 ):
     """
-    Get OHLC (Open, High, Low, Close) data for candlestick charts.
-    Example: /api/stock/AAPL/ohlc?start=2024-03-01&end=2024-04-01
+    Example: GET /api/stock/AAPL/ohlc?start=2024-03-01&end=2024-04-01
     """
     try:
         ticker = validate_ticker(ticker)
-        result = get_stock_ohlc(ticker, start, end)
-        return result
+        return get_stock_ohlc(ticker, start, end)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching OHLC data: {str(e)}")
+        raise HTTPException(500, detail=f"Error fetching OHLC data: {e}")
     

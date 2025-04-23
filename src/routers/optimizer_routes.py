@@ -1,38 +1,34 @@
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException
+from datetime import datetime
 from pydantic import BaseModel
-import numpy as np
-import pandas as pd
-
-from services.optimizers.minimum_variance_optimizer import MinimumVarianceOptimizer
+from services.optimizers.mean_variance import MeanVarianceOptimizer
+import logging
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
-class OptimizationRequest(BaseModel):
-    covariance_matrix: list[list[float]]
-    tickers: list[str] | None = None
-    allow_short: bool = False
+class OptimizeRequest(BaseModel):
+    tickers: list[str]
+    start_date: str
+    end_date: str
+    tau: float = 0.5
 
-@router.post("/portfolio/minimum-variance")
-def optimize_minimum_variance_portfolio(data: OptimizationRequest = Body(...)):
-    """
-    Optimize the minimum variance portfolio given a covariance matrix.
-    POST /api/portfolio/minimum-variance
-    """
+@router.post("/optimizer/mean-variance")
+async def optimize_portfolio(request: OptimizeRequest):
     try:
-        # Create covariance matrix as DataFrame or ndarray
-        cov_matrix = (
-            pd.DataFrame(data.covariance_matrix, index=data.tickers, columns=data.tickers)
-            if data.tickers else np.array(data.covariance_matrix)
+        start_date = datetime.strptime(request.start_date, '%Y-%m-%d')
+        end_date = datetime.strptime(request.end_date, '%Y-%m-%d')
+        optimizer = MeanVarianceOptimizer(
+            tickers=request.tickers,
+            start_date=start_date,
+            end_date=end_date,
+            tau=request.tau
         )
-
-        optimizer = MinimumVarianceOptimizer(cov_matrix, tickers=data.tickers)
-        result = optimizer.find_optimal_portfolio(allow_short=data.allow_short)
-
-        # Convert weights to dictionary if they are in pandas Series
-        if isinstance(result['weights'], pd.Series):
-            result['weights'] = result['weights'].to_dict()
-
-        return result
-
+        report = optimizer.generate_report()
+        return report
+    except ValueError as e:
+        logger.error(f"Optimization error: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error optimizing portfolio: {str(e)}")
+        logger.error(f"Unexpected error during optimization: {str(e)}")
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -359,24 +359,44 @@ def compare_stocks(stock1: str, stock2: str) -> dict:
         logger.error(f"Error comparing stocks {stock1} and {stock2}: {str(e)}")
         raise ValueError(f"Failed to compare stocks: {str(e)}")
     
+# def get_stock_ohlc(ticker: str, start: datetime, end: datetime) -> list:
+#     """
+#     Fetch and process OHLC data for candlestick charts.
+#     """
+#     if start >= end:
+#         raise ValueError("Start date must be earlier than end date.")
+#     end = min(end, datetime.now())  # Cap end date at today
+    
+#     raw_data = DataFetcher.single_stock_data(ticker, start, end)
+#     data = _process_stock_data(raw_data, ticker)
+    
+#     return [{
+#         'date': row['Date'],
+#         'open': round(row['Open'], 2),
+#         'high': round(row['High'], 2),
+#         'low': round(row['Low'], 2),
+#         'close': round(row['Close'], 2)
+#     } for _, row in data.iterrows()]
+
 def get_stock_ohlc(ticker: str, start: datetime, end: datetime) -> list:
     """
     Fetch and process OHLC data for candlestick charts.
     """
     if start >= end:
         raise ValueError("Start date must be earlier than end date.")
-    end = min(end, datetime.now())  # Cap end date at today
-    
-    raw_data = DataFetcher.single_stock_data(ticker, start, end)
-    data = _process_stock_data(raw_data, ticker)
-    
-    return [{
-        'date': row['Date'],
-        'open': round(row['Open'], 2),
-        'high': round(row['High'], 2),
-        'low': round(row['Low'], 2),
-        'close': round(row['Close'], 2)
-    } for _, row in data.iterrows()]
+    end = min(end, datetime.now())
+    raw = DataFetcher.single_stock_data(ticker, start, end)
+    df  = _process_stock_data(raw, ticker)
+    return [
+        {
+          "date":  row["Date"],
+          "open":  round(row["Open"],  2),
+          "high":  round(row["High"],  2),
+          "low":   round(row["Low"],   2),
+          "close": round(row["Close"], 2),
+        }
+        for _, row in df.iterrows()
+    ]
     
 def get_top_performers(index: str) -> list:
     """
