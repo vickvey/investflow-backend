@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
 from .data_fetcher import DataFetcher
@@ -7,6 +7,18 @@ import logging
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
+# Mock lists of tickers for NIFTY and SENSEX (replace with actual data source in production)
+NIFTY_TICKERS = [
+    "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "HINDUNILVR.NS",
+    "ICICIBANK.NS", "KOTAKBANK.NS", "SBIN.NS", "BAJFINANCE.NS", "BHARTIARTL.NS",
+    "ASIANPAINT.NS", "ITC.NS", "AXISBANK.NS", "LT.NS", "MARUTI.NS"
+]
+SENSEX_TICKERS = [
+    "RELIANCE.BO", "HDFCBANK.BO", "INFY.BO", "ICICIBANK.BO", "TCS.BO",
+    "HINDUNILVR.BO", "KOTAKBANK.BO", "SBIN.BO", "BAJFINANCE.BO", "BHARTIARTL.BO",
+    "ASIANPAINT.BO", "ITC.BO", "AXISBANK.BO", "LT.BO", "MARUTI.BO"
+]
 
 def _process_stock_data(data: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """
@@ -186,69 +198,81 @@ def get_stock_performance_metrics(ticker: str, start: datetime, end: datetime) -
     if start >= end:
         raise ValueError("Start date must be earlier than end date.")
     
-    # Cap end date at today to avoid future dates
-    end = min(end, datetime.now())
+    end = min(end, datetime.now())  # Cap end date to today
     
     logger.debug(f"Fetching performance metrics for {ticker} from {start} to {end}")
     
-    # Fetch and process stock and benchmark data
+    # Fetch raw data
     raw_stock_data = DataFetcher.single_stock_data(ticker, start, end)
     raw_benchmark_data = DataFetcher.benchmark_data('^GSPC', start, end)
     
+    # Process and clean
     stock_data = _process_stock_data(raw_stock_data, ticker)
     benchmark_data = _process_stock_data(raw_benchmark_data, '^GSPC')
     
     if stock_data.empty or benchmark_data.empty:
         raise ValueError(f"No data available for {ticker} or benchmark")
-    
-    # Convert to DataFrame with date as index
-    stock_df = pd.DataFrame(stock_data).set_index('Date')
-    benchmark_df = pd.DataFrame(benchmark_data).set_index('Date')
-    
-    logger.debug(f"Stock data columns: {stock_df.columns.tolist()}")
-    logger.debug(f"Benchmark data columns: {benchmark_df.columns.tolist()}")
-    
-    # Verify 'Close' column exists
+
+    # Convert to DataFrame
+    stock_df = pd.DataFrame(stock_data)
+    benchmark_df = pd.DataFrame(benchmark_data)
+
+    # Normalize 'Date' to remove time & tz
+    stock_df['Date'] = pd.to_datetime(stock_df['Date']).dt.date
+    benchmark_df['Date'] = pd.to_datetime(benchmark_df['Date']).dt.date
+
+    # Set index
+    stock_df = stock_df.set_index('Date')
+    benchmark_df = benchmark_df.set_index('Date')
+
+    # Drop duplicate columns
+    stock_df = stock_df.loc[:, ~stock_df.columns.duplicated()]
+    benchmark_df = benchmark_df.loc[:, ~benchmark_df.columns.duplicated()]
+
+    logger.debug(f"Stock data columns after dedup: {stock_df.columns.tolist()}")
+    logger.debug(f"Benchmark data columns after dedup: {benchmark_df.columns.tolist()}")
+
     if 'Close' not in stock_df.columns or 'Close' not in benchmark_df.columns:
         logger.error(f"Missing 'Close' column. Stock columns: {stock_df.columns.tolist()}, Benchmark columns: {benchmark_df.columns.tolist()}")
         raise KeyError("Close column missing in stock or benchmark data")
-    
-    stock_returns = stock_df['Close'].pct_change().rename('Return_stock')
-    benchmark_returns = benchmark_df['Close'].pct_change().rename('Return_benchmark')
+
+    # Compute returns
+    stock_returns = stock_df['Close'].pct_change(fill_method=None).rename('Return_stock')
+    benchmark_returns = benchmark_df['Close'].pct_change(fill_method=None).rename('Return_benchmark')
     merged_df = pd.concat([stock_returns, benchmark_returns], axis=1).dropna()
-    
+
     logger.debug(f"Merged DataFrame columns: {merged_df.columns.tolist()}")
     logger.debug(f"Merged DataFrame shape: {merged_df.shape}")
-    
+
     if merged_df.empty:
         raise ValueError(f"No overlapping data for {ticker} and benchmark")
-    
-    # Calculate metrics
+
+    # Metrics calculation
     start_price = stock_df['Close'].iloc[0]
     end_price = stock_df['Close'].iloc[-1]
     returns = ((end_price - start_price) / start_price) * 100
-    
-    volatility = merged_df['Return_stock'].std() * np.sqrt(252) * 100  # Annualized
+
+    volatility = merged_df['Return_stock'].std() * np.sqrt(252) * 100
     win_rate = (merged_df['Return_stock'] > 0).mean() * 100
-    
+
     # Max Drawdown
     rolling_max = stock_df['Close'].cummax()
     drawdowns = (stock_df['Close'] - rolling_max) / rolling_max
     max_drawdown = drawdowns.min() * 100
-    
+
     # Alpha and Beta
     cov_matrix = merged_df[['Return_stock', 'Return_benchmark']].cov() * 252
     logger.debug(f"Covariance matrix:\n{cov_matrix}")
     beta = cov_matrix.loc['Return_stock', 'Return_benchmark'] / cov_matrix.loc['Return_benchmark', 'Return_benchmark']
-    benchmark_return = ((benchmark_df['Close'].iloc[-1] - benchmark_df['Close'].iloc[0]) / 
-                      benchmark_df['Close'].iloc[0]) * 100
+    benchmark_return = ((benchmark_df['Close'].iloc[-1] - benchmark_df['Close'].iloc[0]) /
+                        benchmark_df['Close'].iloc[0]) * 100
     alpha = returns - (beta * benchmark_return)
-    
+
     # Sharpe Ratio (assume 2% risk-free rate, annualized)
     risk_free_rate = 2.0
     excess_return = returns - risk_free_rate
     sharpe_ratio = excess_return / volatility if volatility != 0 else 0
-    
+
     return {
         'returns': round(returns, 2),
         'alpha': round(alpha, 2),
@@ -280,3 +304,106 @@ def get_volume_history(ticker: str, start: datetime, end: datetime) -> list:
     raw_data = DataFetcher.single_stock_data(ticker, start, end)
     data = _process_stock_data(raw_data, ticker)
     return [{'date': row['Date'], 'volume': round(row['Volume'] / 1e6, 2)} for _, row in data.iterrows()]
+
+# New Added
+def compare_stocks(stock1: str, stock2: str) -> dict:
+    """
+    Compare two stocks over the last 12 months, returning key metrics and price history.
+    """
+    if not stock1 or not stock2:
+        raise ValueError("Both stock tickers must be non-empty strings")
+    if stock1 == stock2:
+        raise ValueError("Cannot compare the same stock")
+
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)  # Last 12 months
+
+    try:
+        # Fetch performance metrics
+        metrics1 = get_stock_performance_metrics(stock1, start_date, end_date)
+        metrics2 = get_stock_performance_metrics(stock2, start_date, end_date)
+
+        # Fetch basic info for P/E ratio and market cap
+        info1 = basic_stock_info(stock1)
+        info2 = basic_stock_info(stock2)
+
+        # Fetch price history for charts
+        price_history1 = get_price_history(stock1, start_date, end_date)
+        price_history2 = get_price_history(stock2, start_date, end_date)
+
+        return {
+            "stock1": {
+                "ticker": stock1,
+                "metrics": {
+                    "returns": float(metrics1["returns"]),  # Convert np.float64 to float
+                    "volatility": float(metrics1["volatility"]),  # Convert np.float64 to float
+                    "peRatio": info1["peRatio"] if info1["peRatio"] != "N/A" else 0,
+                    "marketCap": info1["marketCap"] / 1000 if info1["marketCap"] != "N/A" else 0,  # Convert to trillions
+                },
+            },
+            "stock2": {
+                "ticker": stock2,
+                "metrics": {
+                    "returns": float(metrics2["returns"]),  # Convert np.float64 to float
+                    "volatility": float(metrics2["volatility"]),  # Convert np.float64 to float
+                    "peRatio": info2["peRatio"] if info2["peRatio"] != "N/A" else 0,
+                    "marketCap": info2["marketCap"] / 1000 if info2["marketCap"] != "N/A" else 0,  # Convert to trillions
+                },
+            },
+            "priceHistory": {
+                "stock1": price_history1,
+                "stock2": price_history2,
+            },
+        }
+    except Exception as e:
+        logger.error(f"Error comparing stocks {stock1} and {stock2}: {str(e)}")
+        raise ValueError(f"Failed to compare stocks: {str(e)}")
+    
+def get_stock_ohlc(ticker: str, start: datetime, end: datetime) -> list:
+    """
+    Fetch and process OHLC data for candlestick charts.
+    """
+    if start >= end:
+        raise ValueError("Start date must be earlier than end date.")
+    end = min(end, datetime.now())  # Cap end date at today
+    
+    raw_data = DataFetcher.single_stock_data(ticker, start, end)
+    data = _process_stock_data(raw_data, ticker)
+    
+    return [{
+        'date': row['Date'],
+        'open': round(row['Open'], 2),
+        'high': round(row['High'], 2),
+        'low': round(row['Low'], 2),
+        'close': round(row['Close'], 2)
+    } for _, row in data.iterrows()]
+    
+def get_top_performers(index: str) -> list:
+    """
+    Fetch top 10 performing stocks for the specified index over the last 12 months.
+    """
+    if index not in ["NIFTY", "SENSEX"]:
+        raise ValueError("Index must be either NIFTY or SENSEX")
+    
+    tickers = NIFTY_TICKERS if index == "NIFTY" else SENSEX_TICKERS
+    performers = []
+    
+    for ticker in tickers:
+        try:
+            # Fetch performance over the last 12 months
+            perf = fixed_period_performance(ticker, "1y")
+            if "error" not in perf:
+                info = basic_stock_info(ticker)
+                performers.append({
+                    "symbol": ticker.split('.')[0],  # Remove .NS or .BO suffix
+                    "name": info["name"],
+                    "change": perf["Close"] - perf["Open"],
+                    "changePercent": perf["Return (%)"]
+                })
+        except Exception as e:
+            logger.warning(f"Skipping {ticker} due to error: {str(e)}")
+            continue
+    
+    # Sort by changePercent in descending order and take top 10
+    performers.sort(key=lambda x: x["changePercent"], reverse=True)
+    return performers[:10]
