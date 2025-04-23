@@ -12,6 +12,20 @@ from services.stock_service import (
 
 router = APIRouter()
 
+@router.get("/stock/{ticker}/info")
+def get_basic_stock_info(ticker: str):
+    """
+    Get basic stock information for a single ticker.
+    Example: /api/stock/AAPL/info
+    """
+    try:
+        result = basic_stock_info(ticker)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching stock info: {str(e)}")
+
 @router.get("/stock/{ticker}")
 def get_single_stock(
     ticker: str,
@@ -28,20 +42,6 @@ def get_single_stock(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching data: {str(e)}")
-
-@router.get("/stock/{ticker}/info")
-def get_basic_stock_info(ticker: str):
-    """
-    Get basic stock information for a single ticker.
-    Example: /api/stock/AAPL/info
-    """
-    try:
-        result = basic_stock_info(ticker)
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching stock info: {str(e)}")
 
 @router.get("/stock/{ticker}/today")
 def get_today_performance(ticker: str):
