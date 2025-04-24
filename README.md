@@ -1,6 +1,6 @@
 # Investflow Backend
 
-Investflow Backend is a FastAPI-based API server for the Investflow application, providing endpoints for stock-related operations and integrating with a frontend that uses Clerk for authentication. This document outlines the project structure, setup instructions, and guidelines for contributing.
+Investflow Backend is a FastAPI-based API server for the Investflow application, providing endpoints for stock-related operations, portfolio optimization, and integrating with a frontend that uses Clerk for authentication. This document outlines the project structure, setup instructions, and guidelines for contributing.
 
 ## Table of Contents
 - [Project Overview](#project-overview)
@@ -11,7 +11,7 @@ Investflow Backend is a FastAPI-based API server for the Investflow application,
 - [Running Tests](#running-tests)
 
 ## Project Overview
-The Investflow Backend serves as the API layer for the Investflow application, handling stock-related data and operations. It is built with FastAPI for high performance and integrates with a frontend that uses Clerk for user authentication. The backend verifies JWTs issued by Clerk to secure protected endpoints.
+The Investflow Backend serves as the API layer for the Investflow application, handling stock-related data, portfolio optimization, and risk calculations. It is built with FastAPI for high performance and integrates with a frontend that uses Clerk for user authentication. The backend verifies JWTs issued by Clerk to secure protected endpoints.
 
 ## Directory Structure
 The project is organized as follows:
@@ -19,63 +19,72 @@ The project is organized as follows:
 ```
 investflow-backend/
 ├── src/
-│   ├── config/
-│   │   ├── __init__.py
-│   │   └── settings.py           # Environment variables and configuration (e.g., Clerk JWKS URL, database settings)
-│   ├── database/
-│   │   ├── __init__.py
-│   │   ├── models.py            # Database models (e.g., SQLAlchemy ORM models)
-│   │   └── connections.py       # Database connection setup and configuration
 │   ├── dependencies.py          # FastAPI dependencies (e.g., JWT validation, database sessions)
 │   ├── internal/
 │   │   ├── __init__.py
-│   │   └── admin.py            # Admin-specific logic (e.g., admin routes or services)
-│   ├── middleware/
-│   │   ├── __init__.py
-│   │   └── auth.py             # Middleware for Clerk JWT validation
-│   ├── models/
-│   │   ├── __init__.py
-│   │   └── schemas.py          # Pydantic models for API request/response validation
+│   │   ├── admin_routes.py     # Admin-specific API endpoints
+│   │   └── admin_services.py   # Admin-specific business logic
+│   ├── main.py                 # FastAPI application entry point
 │   ├── routers/
 │   │   ├── __init__.py
-│   │   └── stocks.py           # API endpoints for stock-related operations
+│   │   ├── optimizer_routes.py # API endpoints for portfolio optimization
+│   │   └── stock_routes.py     # API endpoints for stock-related operations
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── auth.py             # Logic for verifying Clerk JWTs
-│   │   └── stocks.py           # Business logic for stock-related operations
+│   │   ├── data_fetcher.py     # Logic for fetching stock data
+│   │   ├── optimizers/
+│   │   │   ├── black_litterman.py       # Black-Litterman optimization model
+│   │   │   ├── maximum_sharpe_ratio.py  # Maximum Sharpe Ratio optimization
+│   │   │   ├── mean_variance.py         # Mean-Variance optimization
+│   │   │   ├── minimum_variance_optimizer.py # Minimum Variance optimization
+│   │   │   └── risk_parity.py           # Risk Parity optimization
+│   │   ├── return_models/
+│   │   │   ├── capm.py                 # CAPM return model
+│   │   │   ├── equal_weighted.py        # Equal-weighted return model
+│   │   │   ├── factor_model.py          # Factor-based return model
+│   │   │   └── historical_return.py     # Historical return model
+│   │   ├── risk_calculator.py          # Risk calculation logic
+│   │   └── stock_service.py            # Business logic for stock-related operations
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   └── test_stock_routes.py        # Unit and integration tests for stock endpoints
 │   ├── utils/
 │   │   ├── __init__.py
-│   │   └── some_util.py        # Utility functions (e.g., helper methods, logging)
-│   ├── main.py                 # FastAPI application entry point
-│   └── __pycache__/            # Compiled Python files (auto-generated)
+│   │   └── some_util.py               # Utility functions (e.g., helper methods, logging)
+│   └── __pycache__/                   # Compiled Python files (auto-generated)
 ├── tests/
 │   ├── __init__.py
-│   │   └── test_stocks.py      # Unit and integration tests for stock endpoints
-├── .env                        # Environment variables (not tracked in git)
-├── .env.example                # Example environment variables for setup
-├── Dockerfile                  # Docker configuration for containerized deployment
-├── docker-compose.yml          # Docker Compose for local development
-├── requirements.txt            # Project dependencies
-├── alembic/                    # Database migrations (if using SQLAlchemy)
+│   └── test_stock_routes.py           # Unit and integration tests for stock endpoints
+├── .env                               # Environment variables (not tracked in git)
+├── .env.example                       # Example environment variables for setup
+├── Dockerfile                         # Docker configuration for containerized deployment
+├── docker-compose.yml                 # Docker Compose for local development
+├── requirements.txt                   # Project dependencies
+├── alembic/                           # Database migrations (if using SQLAlchemy)
 │   ├── env.py
 │   └── script.py.migrations
-├── alembic.ini                 # Alembic configuration for migrations
-└── README.md                   # Project documentation (this file)
+├── alembic.ini                        # Alembic configuration for migrations
+└── README.md                          # Project documentation (this file)
 ```
 
 ### Purpose of Key Files and Folders
 - **`src/`**: Contains the core application code.
-  - **`config/settings.py`**: Loads environment variables (e.g., Clerk JWKS URL, database URL) using `python-dotenv`.
-  - **`database/`**: Manages database models and connections (e.g., SQLAlchemy models, connection pooling).
   - **`dependencies.py`**: Defines FastAPI dependencies for reusable logic (e.g., JWT validation, database sessions).
-  - **`internal/admin.py`**: Handles admin-specific functionality (e.g., admin routes or services; consider renaming for clarity).
-  - **`middleware/auth.py`**: Implements middleware to validate Clerk JWTs for protected routes.
-  - **`models/schemas.py`**: Defines Pydantic models for API request/response validation.
-  - **`routers/stocks.py`**: Defines API endpoints for stock-related operations (e.g., GET /stocks, POST /stocks).
-  - **`services/auth.py`**: Contains logic for verifying Clerk JWTs.
-  - **`services/stocks.py`**: Implements business logic for stock-related operations.
-  - **`utils/some_util.py`**: Houses utility functions (e.g., logging, data formatting).
+  - **`internal/`**:
+    - **`admin_routes.py`**: Defines admin-specific API endpoints.
+    - **`admin_services.py`**: Implements admin-specific business logic.
   - **`main.py`**: Initializes the FastAPI app and mounts routers.
+  - **`routers/`**:
+    - **`optimizer_routes.py`**: Defines API endpoints for portfolio optimization (e.g., Black-Litterman, Mean-Variance).
+    - **`stock_routes.py`**: Defines API endpoints for stock-related operations (e.g., GET /stocks, POST /stocks).
+  - **`services/`**:
+    - **`data_fetcher.py`**: Handles fetching stock data from external sources.
+    - **`optimizers/`**: Contains portfolio optimization models (e.g., Black-Litterman, Maximum Sharpe Ratio).
+    - **`return_models/`**: Implements return calculation models (e.g., CAPM, Historical Returns).
+    - **`risk_calculator.py`**: Provides logic for calculating portfolio risk.
+    - **`stock_service.py`**: Implements business logic for stock-related operations.
+  - **`tests/`**: Contains unit and integration tests for stock endpoints.
+  - **`utils/some_util.py`**: Houses utility functions (e.g., logging, data formatting).
 - **`tests/`**: Contains unit and integration tests for the application.
 - **`.env`**: Stores sensitive environment variables (e.g., Clerk JWKS URL, database credentials).
 - **`.env.example`**: Provides a template for environment variables.
@@ -130,9 +139,9 @@ investflow-backend/
 
 ## Authentication
 The frontend uses Clerk for user authentication, which issues JWTs. The backend verifies these JWTs to secure protected endpoints:
-- **JWT Validation**: Implemented in `middleware/auth.py` using Clerk's JWKS endpoint.
+- **JWT Validation**: Implemented using Clerk's JWKS endpoint.
 - **Dependencies**: Defined in `dependencies.py` for reusable token validation.
-- **Configuration**: Clerk's JWKS URL and other settings are stored in `config/settings.py`.
+- **Configuration**: Clerk's JWKS URL and other settings are stored in environment variables.
 
 To add a protected endpoint:
 1. Use the `Depends` function in `dependencies.py` to validate JWTs.

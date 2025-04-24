@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import stock_routes
 from routers.optimizer_routes import router as optimizer_router
-
+from dotenv import load_dotenv
+load_dotenv()
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -14,7 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name
 app = FastAPI()
 
 # Configure CORS for development
-allowed_origins = ["*"]
+origins_env = os.getenv("ALLOWED_ORIGINS", "")
+allowed_origins = [origin.strip() for origin in origins_env.split(",") if origin.strip()]
 logger.info(f"CORS configured with origins: {allowed_origins}")
 
 # Add CORS middleware
@@ -28,7 +30,7 @@ app.add_middleware(
 
 # Include the stock routes
 app.include_router(stock_routes.router, prefix="/api", tags=["stocks"])
-app.include_router(optimizer_router, prefix="/api", tags = ["optimizer"])
+app.include_router(optimizer_router, prefix="/api", tags=["optimizer"])
 
 # Simple health check route
 @app.get("/")
